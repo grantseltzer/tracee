@@ -11,7 +11,7 @@ import (
 	"github.com/aquasecurity/tracee/tracee-rules/types"
 )
 
-func setupOuput(webhook string) (chan types.Finding, error) {
+func setupOutput(webhook string) (chan types.Finding, error) {
 	out := make(chan types.Finding)
 	go func() {
 		for res := range out {
