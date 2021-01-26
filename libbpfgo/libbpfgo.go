@@ -45,6 +45,15 @@ struct ring_buffer * init_ring_buf(int map_fd) {
 	return rb;
 }
 
+struct ring_buffer * init_ring_buf(int map_fd, int page_cnt) {
+	struct ring_buffer *rb = NULL;
+	rb = ring_buffer__new(map_fd, ringbufferCallback, NULL, NULL); //
+	if (!rb) {
+		fprintf(stderr, "Failed to initialize ring buffer\n");
+        return NULL;
+	}
+}
+
 struct perf_buffer * init_perf_buf(int map_fd, int page_cnt) {
     struct perf_buffer_opts pb_opts = {};
     struct perf_buffer *pb = NULL;
