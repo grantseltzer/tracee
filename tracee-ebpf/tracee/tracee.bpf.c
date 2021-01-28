@@ -194,6 +194,9 @@ BPF_MAP(_name, BPF_MAP_TYPE_PROG_ARRAY, u32, u32, _max_entries);
 #define BPF_PERF_OUTPUT(_name) \
 BPF_MAP(_name, BPF_MAP_TYPE_PERF_EVENT_ARRAY, int, __u32, 1024);
 
+#define BPF_RINGBUF_OUTPUT(_name)\
+BPF_MAP(_name, BPF_MAP_TYPE_RINGBUF, int, __u32, 256 * 1024);
+
 // Stack Traces are slightly different
 // in that the value is 1 big byte array
 // of the stack addresses
@@ -322,9 +325,13 @@ BPF_STACK_TRACE(stack_addresses, MAX_STACK_ADDRESSES);  // Used to store stack t
 
 /*================================== EVENTS ====================================*/
 
-BPF_PERF_OUTPUT(events);                            // Events submission
-BPF_PERF_OUTPUT(file_writes);                       // File writes events submission
-
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0))
+BPF_PERF_OUTPUT(events);          // Events submission
+BPF_PERF_OUTPUT(file_writes);     // File writes events submission
+#else
+BPF_RINGBUF_OUTPUT(events);       // Events submission
+BPF_RINGBUF_OUTPUT(file_writes);  // File writes events submission
+#endif
 /*================== KERNEL VERSION DEPENDANT HELPER FUNCTIONS =================*/
 
 static __always_inline u32 get_task_mnt_ns_id(struct task_struct *task)

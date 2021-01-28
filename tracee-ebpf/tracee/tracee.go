@@ -181,6 +181,8 @@ type Tracee struct {
 	bpfModule         *bpf.Module
 	eventsPerfMap     *bpf.PerfBuffer
 	fileWrPerfMap     *bpf.PerfBuffer
+	eventsRingbufMap  *bpf.RingBuffer
+	fileWrRingbufMap  *bpf.RingBuffer
 	eventsChannel     chan []byte
 	fileWrChannel     chan []byte
 	lostEvChannel     chan uint64
@@ -402,29 +404,56 @@ func UnameRelease() string {
 	if i := strings.Index(ver, "\x00"); i != -1 {
 		ver = ver[:i]
 	}
+
 	return ver
 }
 
-func supportRawTP() (bool, error) {
+func majorMinorUname() (int, int, error) {
+
 	ver := UnameRelease()
+
 	if ver == "" {
-		return false, fmt.Errorf("could not determine current release")
+		return -1, -1, fmt.Errorf("could not determine current release")
 	}
 	ver_split := strings.Split(ver, ".")
 	if len(ver_split) < 2 {
-		return false, fmt.Errorf("invalid version returned by uname")
+		return -1, -1, fmt.Errorf("invalid version returned by uname")
 	}
 	major, err := strconv.Atoi(ver_split[0])
 	if err != nil {
-		return false, fmt.Errorf("invalid major number: %s", ver_split[0])
+		return -1, -1, fmt.Errorf("invalid major number: %s", ver_split[0])
 	}
 	minor, err := strconv.Atoi(ver_split[1])
 	if err != nil {
-		return false, fmt.Errorf("invalid minor number: %s", ver_split[1])
+		return -1, -1, fmt.Errorf("invalid minor number: %s", ver_split[1])
 	}
+
+	return major, minor, err
+}
+
+func supportRingbuffers() (bool, error) {
+	major, minor, err := majorMinorUname()
+	if err != nil {
+		return false, fmt.Errorf("could not determine current release: %v", err)
+	}
+
+	if (major == 5 && minor >= 8) || (major > 5) {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func supportRawTP() (bool, error) {
+	major, minor, err := majorMinorUname()
+	if err != nil {
+		return false, fmt.Errorf("could not determine current release: %v", err)
+	}
+
 	if ((major == 4) && (minor >= 17)) || (major > 4) {
 		return true, nil
 	}
+
 	return false, nil
 }
 
@@ -846,21 +875,36 @@ func (t *Tracee) initBPF(bpfObjectPath string) error {
 		}
 	}
 
-	//TODO: if kernel version supports ringbuffers, use them instead of perf
-
-	// Initialize perf buffers
+	// Initialize output buffers
 	t.eventsChannel = make(chan []byte, 1000)
 	t.lostEvChannel = make(chan uint64)
-	t.eventsPerfMap, err = t.bpfModule.InitPerfBuf("events", t.eventsChannel, t.lostEvChannel, t.config.PerfBufferSize)
-	if err != nil {
-		return fmt.Errorf("error initializing events perf map: %v", err)
-	}
 
 	t.fileWrChannel = make(chan []byte, 1000)
 	t.lostWrChannel = make(chan uint64)
-	t.fileWrPerfMap, err = t.bpfModule.InitPerfBuf("file_writes", t.fileWrChannel, t.lostWrChannel, t.config.BlobPerfBufferSize)
+
+	supportsRingBuf, err := supportRingbuffers()
 	if err != nil {
-		return fmt.Errorf("error initializing file_writes perf map: %v", err)
+		return fmt.Errorf("couldn't determine if kernel supports ringbuffers: %v", err)
+	}
+	if supportsRingBuf {
+		t.eventsRingbufMap, err = t.bpfModule.InitRingBuf("events", t.eventsChannel)
+		if err != nil {
+			return fmt.Errorf("error initializing events ringbuffer map: %v", err)
+		}
+		t.fileWrRingbufMap, err = t.bpfModule.InitRingBuf("file_writes", t.fileWrChannel)
+		if err != nil {
+			return fmt.Errorf("error initializing file_writes ringbuffer map: %v", err)
+		}
+	} else {
+		t.eventsPerfMap, err = t.bpfModule.InitPerfBuf("events", t.eventsChannel, t.lostEvChannel, t.config.PerfBufferSize)
+		if err != nil {
+			return fmt.Errorf("error initializing events perf map: %v", err)
+		}
+
+		t.fileWrPerfMap, err = t.bpfModule.InitPerfBuf("file_writes", t.fileWrChannel, t.lostWrChannel, t.config.BlobPerfBufferSize)
+		if err != nil {
+			return fmt.Errorf("error initializing file_writes perf map: %v", err)
+		}
 	}
 
 	return nil
@@ -872,8 +916,11 @@ func (t *Tracee) Run() error {
 	signal.Notify(sig, os.Interrupt)
 	done := make(chan struct{})
 	t.printer.Preamble()
+
+	// XXX: these change to t.eventsRingbufMap.Start()
 	t.eventsPerfMap.Start()
 	t.fileWrPerfMap.Start()
+
 	go t.processLostEvents()
 	go t.runEventPipeline(done)
 	go t.processFileWrites()
