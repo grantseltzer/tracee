@@ -291,7 +291,6 @@ func NewModuleFromBuffer(bpfObjBuff []byte, bpfObjName string) (*Module, error) 
 }
 
 func (m *Module) Close() {
-
 	for _, pb := range m.perfBufs {
 		pb.Close()
 	}
