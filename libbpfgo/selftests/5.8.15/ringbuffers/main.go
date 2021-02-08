@@ -18,6 +18,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	defer bpfModule.Close()
 
 	bpfModule.BPFLoadObject()
 
@@ -26,13 +27,30 @@ func main() {
 		panic(err)
 	}
 
-	go bpf.TracePrint()
-
 	_, err = prog.AttachKprobe("__x64_sys_execve")
 	if err != nil {
 		panic(err)
 	}
 
+	eventsChannel := make(chan []bytes)
+	rb, err := InitRingBuf("events", eventsChannel)
+	if err != nil {
+		panic(err)
+	}
+	rb.Start()
+
+	go func() {
+		for {
+			switch {
+				case z := <-eventsChannel:
+					fmt.Println(z)
+			}
+		}
+	}()
+
 	<-sig
+	rb.Stop()
+	rb.Close()
+
 	fmt.Println("complete")
 }

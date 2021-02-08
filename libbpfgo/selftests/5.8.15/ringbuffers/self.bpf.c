@@ -11,8 +11,8 @@
 
 char LICENSE[] SEC("license") = "GPL";
 
+//TODO:
 SEC("kprobe/sys_execve")
 int self(void *ctx) {
-	bpf_printk("test");
     return 0;
 }
