@@ -17,8 +17,7 @@ $(TARGET): $(GO_SRC)
 
 $(TARGET_BPF): $(BPF_SRC)
 	clang \
-		-I /usr/include/x86_64-linux-gnu \
-		-O2 -c -target bpf \
+		-g -O2 -c -target bpf \
 		-o $@ $<
 
 .PHONY: clean

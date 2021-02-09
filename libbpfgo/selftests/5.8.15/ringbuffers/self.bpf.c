@@ -1,7 +1,15 @@
 //+build ignore
 
-#include "vmlinux.h"
+#ifdef asm_inline
+#undef asm_inline
+#define asm_inline asm
+#endif
+
+#include <linux/types.h>
+#include <linux/bpf.h>
 #include <bpf/bpf_helpers.h>
+#include <stdint.h>
+#include <linux/ptrace.h>
 
 char LICENSE[] SEC("license") = "GPL";
 
@@ -18,25 +26,26 @@ struct {
 long ringbuffer_flags = 0;
 
 SEC("kprobe/sys_mmap")
-int kprobe_sys_mmap(struct pt_regs *ctx)
+int kprobe__sys_mmap(struct pt_regs *ctx)
 {
-	u64 id = bpf_get_current_pid_tgid();
-	u32 tgid = id >> 32;
+	__u64 id = bpf_get_current_pid_tgid();
+	__u32 tgid = id >> 32;
 	struct process_info *process;
-
+	
     // Reserve space on the ringbuffer for the sample
 	process = bpf_ringbuf_reserve(&events, sizeof(struct process_info), ringbuffer_flags);
 	if (!process) {
 		return 0;
     }
 
-	void* stackAddr = (void*)ctx->sp;
+	void* stackAddr = (void*)ctx->rsp;
 	char argument1;
 	bpf_probe_read(&argument1, sizeof(argument1), stackAddr+8);
 
 	process->pid = tgid;
 	process->arg = argument1;
 	bpf_ringbuf_submit(process, ringbuffer_flags);
+	bpf_printk("Submitted\n");
 
     return 0;
 }

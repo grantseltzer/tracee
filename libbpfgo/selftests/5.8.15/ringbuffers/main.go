@@ -4,6 +4,7 @@ import "C"
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 
@@ -21,7 +22,7 @@ func main() {
 	defer bpfModule.Close()
 
 	bpfModule.BPFLoadObject()
-	prog, err := bpfModule.GetProgram("kprobe/sys_mmap")
+	prog, err := bpfModule.GetProgram("kprobe__sys_mmap")
 	if err != nil {
 		panic(err)
 	}
@@ -43,6 +44,11 @@ func main() {
 			select {
 			case z := <-eventsChannel:
 				fmt.Println(z)
+			case <-sig:
+				log.Fatal("exiting")
+				rb.Stop()
+				rb.Close()
+				log.Fatal("exited")
 			}
 		}
 	}()
