@@ -21,19 +21,18 @@ func main() {
 	defer bpfModule.Close()
 
 	bpfModule.BPFLoadObject()
-
-	prog, err := bpfModule.GetProgram("self")
+	prog, err := bpfModule.GetProgram("kprobe/sys_mmap")
 	if err != nil {
 		panic(err)
 	}
 
-	_, err = prog.AttachKprobe("__x64_sys_execve")
+	_, err = prog.AttachKprobe("__x64_sys_mmap")
 	if err != nil {
 		panic(err)
 	}
 
-	eventsChannel := make(chan []bytes)
-	rb, err := InitRingBuf("events", eventsChannel)
+	eventsChannel := make(chan []byte)
+	rb, err := bpfModule.InitRingBuf("events", eventsChannel)
 	if err != nil {
 		panic(err)
 	}
@@ -41,9 +40,9 @@ func main() {
 
 	go func() {
 		for {
-			switch {
-				case z := <-eventsChannel:
-					fmt.Println(z)
+			select {
+			case z := <-eventsChannel:
+				fmt.Println(z)
 			}
 		}
 	}()
