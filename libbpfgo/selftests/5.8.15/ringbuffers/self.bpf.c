@@ -45,7 +45,5 @@ int kprobe__sys_mmap(struct pt_regs *ctx)
 	process->pid = tgid;
 	process->arg = argument1;
 	bpf_ringbuf_submit(process, ringbuffer_flags);
-	bpf_printk("Submitted\n");
-
     return 0;
 }
