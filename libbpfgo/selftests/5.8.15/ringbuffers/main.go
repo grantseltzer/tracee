@@ -3,10 +3,12 @@ package main
 import "C"
 
 import (
+	"encoding/binary"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 
 	bpf "github.com/aquasecurity/tracee/libbpfgo"
 )
@@ -22,12 +24,12 @@ func main() {
 	defer bpfModule.Close()
 
 	bpfModule.BPFLoadObject()
-	prog, err := bpfModule.GetProgram("kprobe__sys_mmap")
+	prog, err := bpfModule.GetProgram("kprobe__sys_execve")
 	if err != nil {
 		panic(err)
 	}
 
-	_, err = prog.AttachKprobe("__x64_sys_mmap")
+	_, err = prog.AttachKprobe("__x64_sys_execve")
 	if err != nil {
 		panic(err)
 	}
@@ -43,7 +45,9 @@ func main() {
 		for {
 			select {
 			case z := <-eventsChannel:
-				fmt.Println(z)
+				pid := binary.LittleEndian.Uint32(z[0:5])
+				fmt.Printf("PID %d", int(pid))
+				fmt.Printf("\t%s\n", strings.SplitN(string(z[5:]), "\u0000", 2))
 			case <-sig:
 				log.Fatal("exiting")
 				rb.Stop()

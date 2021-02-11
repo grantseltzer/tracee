@@ -14,7 +14,7 @@ all: $(TARGET) $(TARGET_BPF)
 go_env := CC=gcc CGO_CFLAGS="-I $(LIBBPF_HEADERS)" CGO_LDFLAGS="$(LIBBPF_OBJ)"
 .PHONY: $(TARGET)
 $(TARGET): $(GO_SRC)
-	$(go_env) go build -ldflags="-extldflags=-static" -o $(TARGET) 
+	$(go_env) go build -o $(TARGET) 
 
 .PHONY: $(TARGET_BPF)
 $(TARGET_BPF): $(BPF_SRC)

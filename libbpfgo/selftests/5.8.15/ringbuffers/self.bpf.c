@@ -15,7 +15,7 @@ char LICENSE[] SEC("license") = "GPL";
 
 struct process_info {
 	int pid;
-	char arg;
+	char comm[100];
 };
 
 struct {
@@ -25,8 +25,8 @@ struct {
 
 long ringbuffer_flags = 0;
 
-SEC("kprobe/sys_mmap")
-int kprobe__sys_mmap(struct pt_regs *ctx)
+SEC("kprobe/sys_execve")
+int kprobe__sys_execve(struct pt_regs *ctx)
 {
 	__u64 id = bpf_get_current_pid_tgid();
 	__u32 tgid = id >> 32;
@@ -38,12 +38,9 @@ int kprobe__sys_mmap(struct pt_regs *ctx)
 		return 0;
     }
 
-	void* stackAddr = (void*)ctx->rsp;
-	char argument1;
-	bpf_probe_read(&argument1, sizeof(argument1), stackAddr+8);
-
 	process->pid = tgid;
-	process->arg = argument1;
+    bpf_get_current_comm(&process->comm, 100);
+	
 	bpf_ringbuf_submit(process, ringbuffer_flags);
     return 0;
 }
