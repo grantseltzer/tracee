@@ -25,8 +25,8 @@ struct {
 
 long ringbuffer_flags = 0;
 
-SEC("kprobe/sys_execve")
-int kprobe__sys_execve(struct pt_regs *ctx)
+SEC("kprobe/sys_mmap")
+int kprobe__sys_mmap(struct pt_regs *ctx)
 {
 	__u64 id = bpf_get_current_pid_tgid();
 	__u32 tgid = id >> 32;

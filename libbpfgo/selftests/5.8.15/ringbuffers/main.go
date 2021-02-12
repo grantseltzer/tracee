@@ -24,12 +24,12 @@ func main() {
 	defer bpfModule.Close()
 
 	bpfModule.BPFLoadObject()
-	prog, err := bpfModule.GetProgram("kprobe__sys_execve")
+	prog, err := bpfModule.GetProgram("kprobe__sys_mmap")
 	if err != nil {
 		panic(err)
 	}
 
-	_, err = prog.AttachKprobe("__x64_sys_execve")
+	_, err = prog.AttachKprobe("__x64_sys_mmap")
 	if err != nil {
 		panic(err)
 	}
