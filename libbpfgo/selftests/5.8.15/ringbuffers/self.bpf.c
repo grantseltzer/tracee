@@ -1,15 +1,11 @@
 //+build ignore
+#include "vmlinux.h"
+#include <bpf/bpf_helpers.h>  
 
 #ifdef asm_inline
 #undef asm_inline
 #define asm_inline asm
 #endif
-
-#include <linux/types.h>
-#include <linux/bpf.h>
-#include <bpf/bpf_helpers.h>
-#include <stdint.h>
-#include <linux/ptrace.h>
 
 char LICENSE[] SEC("license") = "GPL";
 
