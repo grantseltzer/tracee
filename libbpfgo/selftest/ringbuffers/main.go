@@ -1,4 +1,4 @@
-package main
+package ringbuffertester
 
 import "C"
 
@@ -13,7 +13,7 @@ import (
 	bpf "github.com/aquasecurity/tracee/libbpfgo"
 )
 
-func main() {
+func runner() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
 
