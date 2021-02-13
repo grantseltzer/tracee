@@ -1,19 +1,15 @@
-package ringbuffertester
+package main
 
 import "C"
 
 import (
-	"encoding/binary"
-	"fmt"
-	"log"
 	"os"
 	"os/signal"
-	"strings"
 
 	bpf "github.com/aquasecurity/tracee/libbpfgo"
 )
 
-func runner() {
+func main() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
 
@@ -41,18 +37,21 @@ func runner() {
 	}
 	rb.Start()
 
+	numberOfEventsReceived := 0
+
 	go func() {
 		for {
 			select {
-			case z := <-eventsChannel:
-				pid := binary.LittleEndian.Uint32(z[0:5])
-				fmt.Printf("PID %d", int(pid))
-				fmt.Printf("\t%s\n", strings.SplitN(string(z[5:]), "\u0000", 2))
+			case <-eventsChannel:
+				numberOfEventsReceived++ 
+				if numberOfEventsReceived > 5 {
+					rb.Stop()
+					rb.Close()	
+					os.Exit(0)	
+				}
 			case <-sig:
-				log.Fatal("exiting")
 				rb.Stop()
 				rb.Close()
-				log.Fatal("exited")
 			}
 		}
 	}()
@@ -60,6 +59,4 @@ func runner() {
 	<-sig
 	rb.Stop()
 	rb.Close()
-
-	fmt.Println("complete")
 }
