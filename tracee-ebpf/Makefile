@@ -72,6 +72,8 @@ bpf: $(OUT_BPF)
 
 linux_arch := $(ARCH:x86_64=x86)
 ifndef DOCKER
+ifndef CORE
+#docker no, CO:RE no
 $(OUT_DIR)/tracee.bpf.%.o: $(BPF_SRC) $(LIBBPF_HEADERS) | $(OUT_DIR) $(bpf_compile_tools)
 	@v=$$($(CMD_CLANG) --version); test $$(echo $${v#*version} | head -n1 | cut -d '.' -f1) -ge '9' || (echo 'required minimum clang version: 9' ; false)
 	$(CMD_CLANG) -S \
@@ -111,6 +113,16 @@ $(OUT_DIR)/tracee.bpf.%.o: $(BPF_SRC) $(LIBBPF_HEADERS) | $(OUT_DIR) $(bpf_compi
 	-$(CMD_LLVM_STRIP) -g $@
 	rm $(@:.o=.ll)
 else
+#docker no, CO:RE yes
+$(OUT_DIR)/tracee.bpf.%.o: $(BPF_SRC) $(CMD_CLANG)
+	$(CMD_CLANG) \
+		-I $(LIBBPF_HEADERS)/bpf \
+		-g -O2 -c -target bpf \
+		-DCORE \
+		-o $@ $<
+endif
+else
+#docker yes
 $(OUT_BPF): $(DOCKER_BUILDER) | $(OUT_DIR) 
 	$(call docker_builder_make,$@)
 endif
