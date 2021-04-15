@@ -5,12 +5,13 @@
  * Redefine it to just asm to enable successful compilation.
  * see https://github.com/iovisor/bcc/commit/2d1497cde1cc9835f759a707b42dea83bee378b8 for more details
  */
-#include <linux/types.h>
 #ifdef asm_inline
 #undef asm_inline
 #define asm_inline asm
 #endif
 
+#ifndef CORE
+#include <linux/types.h>
 #include <uapi/linux/ptrace.h>
 #include <uapi/linux/in.h>
 #include <uapi/linux/in6.h>
@@ -44,8 +45,13 @@
 #include <linux/kconfig.h>
 #include <linux/version.h>
 
+
+#else
+//CO:RE is enabled
+#include "vmlinux.h"
+#endif
+
 #undef container_of
-//#include "bpf_core_read.h"
 #include <bpf_helpers.h>
 #include <bpf_tracing.h>
 #include <bpf_endian.h>
@@ -55,6 +61,8 @@
 #elif defined(bpf_target_arm64)
 #define PT_REGS_PARM6(x) (((PT_REGS_ARM64 *)(x))->regs[5])
 #endif
+
+#define TASK_COMM_LEN			16
 
 #define MAX_PERCPU_BUFSIZE  (1 << 15)     // This value is actually set by the kernel as an upper bound
 #define MAX_STRING_SIZE     4096          // Choosing this value to be the same as PATH_MAX
@@ -294,8 +302,9 @@ struct bpf_map_def SEC("maps") _name = { \
 #endif
 
 /*=============================== INTERNAL STRUCTS ===========================*/
+#define TASK_COMM_LEN			16
 
-typedef struct context {
+typedef struct internal_proc_context {
     u64 ts;                     // Timestamp
     u32 pid;                    // PID as in the userspace term
     u32 tid;                    // TID as in the userspace term
@@ -380,15 +389,15 @@ typedef struct slim_cred {
 
 /*================================ KERNEL STRUCTS =============================*/
 
-struct mnt_namespace {
+struct mount_namespace {
     atomic_t        count;
     struct ns_common    ns;
     // ...
 };
 
-struct mount {
+struct vmount {
     struct hlist_node mnt_hash;
-    struct mount *mnt_parent;
+    struct vmount *mnt_parent;
     struct dentry *mnt_mountpoint;
     struct vfsmount mnt;
     // ...
@@ -441,32 +450,57 @@ static __always_inline u32 kernel_config_option_enabled(u32 key) {
 
 static __always_inline u32 get_mnt_ns_id(struct nsproxy *ns)
 {
+    #ifndef CORE
     return READ_KERN(READ_KERN(ns->mnt_ns)->ns.inum);
+    #else
+    return BPF_CORE_READ();
+    return 1;
+    #endif
 }
 
 static __always_inline u32 get_pid_ns_id(struct nsproxy *ns)
 {
+    #ifndef CORE
     return READ_KERN(READ_KERN(ns->pid_ns_for_children)->ns.inum);
+    #else
+    return 1;
+    #endif
 }
 
 static __always_inline u32 get_uts_ns_id(struct nsproxy *ns)
 {
+    #ifndef CORE
     return READ_KERN(READ_KERN(ns->uts_ns)->ns.inum);
+    #else
+    return 1;
+    #endif
 }
 
 static __always_inline u32 get_ipc_ns_id(struct nsproxy *ns)
 {
+    #ifndef CORE
     return READ_KERN(READ_KERN(ns->ipc_ns)->ns.inum);
+    #else
+    return 1;
+    #endif
 }
 
 static __always_inline u32 get_net_ns_id(struct nsproxy *ns)
 {
+    #ifndef CORE
     return READ_KERN(READ_KERN(ns->net_ns)->ns.inum);
+    #else
+    return 1;
+    #endif
 }
 
 static __always_inline u32 get_cgroup_ns_id(struct nsproxy *ns)
 {
+    #ifndef CORE
     return READ_KERN(READ_KERN(ns->cgroup_ns)->ns.inum);
+    #else
+    return 1;
+    #endif
 }
 
 static __always_inline u32 get_task_mnt_ns_id(struct task_struct *task)
@@ -654,9 +688,9 @@ static __always_inline unsigned long get_vma_flags(struct vm_area_struct *vma)
     return READ_KERN(vma->vm_flags);
 }
 
-static inline struct mount *real_mount(struct vfsmount *mnt)
+static inline struct vmount *real_mount(struct vfsmount *mnt)
 {
-    return container_of(mnt, struct mount, mnt);
+    return container_of(mnt, struct vmount, mnt);
 }
 
 static __always_inline u32 get_inet_rcv_saddr(struct inet_sock *inet)
@@ -1219,9 +1253,9 @@ static __always_inline int save_path_to_str_buf(buf_t *string_p, const struct pa
     int zero = 0;
     struct dentry *dentry = f_path.dentry;
     struct vfsmount *vfsmnt = f_path.mnt;
-    struct mount *mnt_p = real_mount(vfsmnt);
-    struct mount mnt;
-    bpf_probe_read(&mnt, sizeof(struct mount), mnt_p);
+    struct vmount *mnt_p = real_mount(vfsmnt);
+    struct vmount mnt;
+    bpf_probe_read(&mnt, sizeof(struct vmount), mnt_p);
 
     u32 buf_off = (MAX_PERCPU_BUFSIZE >> 1);
 
@@ -1238,7 +1272,7 @@ static __always_inline int save_path_to_str_buf(buf_t *string_p, const struct pa
             if (mnt_p != mnt.mnt_parent) {
                 // We reached root, but not global root - continue with mount point path
                 dentry = mnt.mnt_mountpoint;
-                bpf_probe_read(&mnt, sizeof(struct mount), mnt.mnt_parent);
+                bpf_probe_read(&mnt, sizeof(struct vmount), mnt.mnt_parent);
                 vfsmnt = &mnt.mnt;
                 continue;
             }
