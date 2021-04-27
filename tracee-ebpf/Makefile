@@ -32,6 +32,7 @@ DOCKER_BUILDER_KERN_BLD ?= $(if $(shell readlink $(KERN_BLD_PATH)),$(shell readl
 DOCKER_BUILDER_KERN_SRC ?= $(if $(shell readlink $(KERN_SRC_PATH)),$(shell readlink $(KERN_SRC_PATH)),$(KERN_SRC_PATH))
 # DOCKER_BUILDER_KERN_SRC_MNT is the kernel headers directory to mount into the docker builder container. DOCKER_BUILDER_KERN_SRC should usually be a descendent of this path.
 DOCKER_BUILDER_KERN_SRC_MNT ?= $(dir $(DOCKER_BUILDER_KERN_SRC))
+LINUX_VERSION_CODE := $(shell uname -r | awk '{split($$0,a,"."); split(a[3], b, "-"); print lshift(a[1], 16) + lshift(a[2],8) + b[1];}')
 
 $(OUT_DIR):
 	mkdir -p $@
@@ -117,8 +118,13 @@ else
 $(OUT_DIR)/tracee.bpf.%.o: $(BPF_SRC) $(CMD_CLANG)
 	$(CMD_CLANG) \
 		-I $(LIBBPF_HEADERS)/bpf \
+		-I $(BPF_HEADERS) \
 		-g -O2 -c -target bpf \
 		-DCORE \
+		-D__BPF_TRACING__ \
+		-D__VM_LINUX_H__ \
+		-D__KERNEL__ \
+		-DLINUX_VERSION_CODE=$(LINUX_VERSION_CODE) \
 		-o $@ $<
 endif
 else
