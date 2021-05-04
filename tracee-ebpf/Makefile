@@ -121,6 +121,7 @@ $(OUT_DIR)/tracee.bpf.o: $(BPF_SRC) $(LIBBPF_HEADERS) $(CMD_CLANG)
 		-I $(BPF_HEADERS) \
 		-g -O2 -c -target bpf \
 		-DCORE \
+		-D__TARGET_ARCH_$(linux_arch) \
 		-D__BPF_TRACING__ \
 		-D__VM_LINUX_H__ \
 		-D__KERNEL__ \

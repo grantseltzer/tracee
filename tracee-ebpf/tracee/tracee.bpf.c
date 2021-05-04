@@ -45,16 +45,26 @@
 #include <linux/kconfig.h>
 #include <linux/version.h>
 
+#undef container_of
+#include <bpf_helpers.h>
+#include <bpf_tracing.h>
+#include <bpf_endian.h>
+#include <bpf_core_read.h>
 
 #else
 //CO:RE is enabled
 #include "vmlinux.h"
-#endif
 
 #undef container_of
 #include <bpf_helpers.h>
 #include <bpf_tracing.h>
 #include <bpf_endian.h>
+#include <bpf_core_read.h>
+
+#include "missing_macros.h"
+
+#endif
+
 
 #if defined(bpf_target_x86)
 #define PT_REGS_PARM6(ctx)  ((ctx)->r9)
@@ -251,11 +261,19 @@
 #define KERNEL_CONFIG_BPF_PRELOAD               37
 #define KERNEL_CONFIG_BPF_PRELOAD_UMD           38
 
+#ifndef CORE
 #define READ_KERN(ptr) ({ typeof(ptr) _val;                             \
                           __builtin_memset(&_val, 0, sizeof(_val));     \
                           bpf_probe_read(&_val, sizeof(_val), &ptr);    \
                           _val;                                         \
                         })
+#else
+#define READ_KERN(ptr) ({ typeof(ptr) _val;                             \
+                          __builtin_memset(&_val, 0, sizeof(_val));     \
+                          bpf_core_read(&_val, sizeof(_val), &ptr);    \
+                          _val;                                         \
+                        })
+#endif
 
 #define BPF_MAP(_name, _type, _key_type, _value_type, _max_entries) \
 struct bpf_map_def SEC("maps") _name = { \
@@ -450,57 +468,32 @@ static __always_inline u32 kernel_config_option_enabled(u32 key) {
 
 static __always_inline u32 get_mnt_ns_id(struct nsproxy *ns)
 {
-    #ifndef CORE
     return READ_KERN(READ_KERN(ns->mnt_ns)->ns.inum);
-    #else
-    return BPF_CORE_READ();
-    return 1;
-    #endif
 }
 
 static __always_inline u32 get_pid_ns_id(struct nsproxy *ns)
 {
-    #ifndef CORE
     return READ_KERN(READ_KERN(ns->pid_ns_for_children)->ns.inum);
-    #else
-    return 1;
-    #endif
 }
 
 static __always_inline u32 get_uts_ns_id(struct nsproxy *ns)
 {
-    #ifndef CORE
     return READ_KERN(READ_KERN(ns->uts_ns)->ns.inum);
-    #else
-    return 1;
-    #endif
 }
 
 static __always_inline u32 get_ipc_ns_id(struct nsproxy *ns)
 {
-    #ifndef CORE
     return READ_KERN(READ_KERN(ns->ipc_ns)->ns.inum);
-    #else
-    return 1;
-    #endif
 }
 
 static __always_inline u32 get_net_ns_id(struct nsproxy *ns)
 {
-    #ifndef CORE
     return READ_KERN(READ_KERN(ns->net_ns)->ns.inum);
-    #else
-    return 1;
-    #endif
 }
 
 static __always_inline u32 get_cgroup_ns_id(struct nsproxy *ns)
 {
-    #ifndef CORE
     return READ_KERN(READ_KERN(ns->cgroup_ns)->ns.inum);
-    #else
-    return 1;
-    #endif
 }
 
 static __always_inline u32 get_task_mnt_ns_id(struct task_struct *task)
