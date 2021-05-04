@@ -115,7 +115,7 @@ $(OUT_DIR)/tracee.bpf.%.o: $(BPF_SRC) $(LIBBPF_HEADERS) | $(OUT_DIR) $(bpf_compi
 	rm $(@:.o=.ll)
 else
 #docker no, CO:RE yes
-$(OUT_DIR)/tracee.bpf.%.o: $(BPF_SRC) $(CMD_CLANG)
+$(OUT_DIR)/tracee.bpf.o: $(BPF_SRC) $(LIBBPF_HEADERS) $(CMD_CLANG)
 	$(CMD_CLANG) \
 		-I $(LIBBPF_HEADERS)/bpf \
 		-I $(BPF_HEADERS) \
@@ -125,6 +125,7 @@ $(OUT_DIR)/tracee.bpf.%.o: $(BPF_SRC) $(CMD_CLANG)
 		-D__VM_LINUX_H__ \
 		-D__KERNEL__ \
 		-DLINUX_VERSION_CODE=$(LINUX_VERSION_CODE) \
+		-target bpf \
 		-o $@ $<
 endif
 else
