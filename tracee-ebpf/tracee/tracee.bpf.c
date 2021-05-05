@@ -418,20 +418,21 @@ typedef struct slim_cred {
 
 /*================================ KERNEL STRUCTS =============================*/
 
-struct mount_namespace {
+#ifndef CORE
+struct mnt_namespace {
     atomic_t        count;
     struct ns_common    ns;
     // ...
 };
 
-struct vmount {
+struct mount {
     struct hlist_node mnt_hash;
-    struct vmount *mnt_parent;
+    struct mount *mnt_parent;
     struct dentry *mnt_mountpoint;
     struct vfsmount mnt;
     // ...
 };
-
+#endif
 /*=================================== MAPS =====================================*/
 
 BPF_HASH(config_map, u32, u32);                         // Various configurations
@@ -691,9 +692,9 @@ static __always_inline unsigned long get_vma_flags(struct vm_area_struct *vma)
     return KERN_READ(vma, vm_flags);
 }
 
-static inline struct vmount *real_mount(struct vfsmount *mnt)
+static inline struct mount *real_mount(struct vfsmount *mnt)
 {
-    return container_of(mnt, struct vmount, mnt);
+    return container_of(mnt, struct mount, mnt);
 }
 
 static __always_inline u32 get_inet_rcv_saddr(struct inet_sock *inet)
@@ -1254,9 +1255,9 @@ static __always_inline int save_path_to_str_buf(buf_t *string_p, const struct pa
     int zero = 0;
     struct dentry *dentry = f_path.dentry;
     struct vfsmount *vfsmnt = f_path.mnt;
-    struct vmount *mnt_p = real_mount(vfsmnt);
-    struct vmount mnt;
-    bpf_probe_read(&mnt, sizeof(struct vmount), mnt_p);
+    struct mount *mnt_p = real_mount(vfsmnt);
+    struct mount mnt;
+    bpf_probe_read(&mnt, sizeof(struct mount), mnt_p);
 
     u32 buf_off = (MAX_PERCPU_BUFSIZE >> 1);
 
@@ -1273,7 +1274,7 @@ static __always_inline int save_path_to_str_buf(buf_t *string_p, const struct pa
             if (mnt_p != mnt.mnt_parent) {
                 // We reached root, but not global root - continue with mount point path
                 dentry = mnt.mnt_mountpoint;
-                bpf_probe_read(&mnt, sizeof(struct vmount), mnt.mnt_parent);
+                bpf_probe_read(&mnt, sizeof(struct mount), mnt.mnt_parent);
                 vfsmnt = &mnt.mnt;
                 continue;
             }
@@ -1717,7 +1718,7 @@ static __always_inline struct ipv6_pinfo *inet6_sk_own_impl(struct sock *__sk, s
     return sk_fullsock ? pinet6_own_impl : NULL;
 }
 
-static inline bool ipv6_addr_any(const struct in6_addr *a)
+static inline bool ipv6_any_addr(const struct in6_addr *a)
 {
     return (a->in6_u.u6_addr32[0] | a->in6_u.u6_addr32[1] | a->in6_u.u6_addr32[2] | a->in6_u.u6_addr32[3]) == 0;
 }
@@ -1729,7 +1730,7 @@ static __always_inline int get_network_details_from_sock_v6(struct sock *sk, net
 
     struct in6_addr addr = {};
     addr = get_sock_v6_rcv_saddr(sk);
-    if (ipv6_addr_any(&addr)){
+    if (ipv6_any_addr(&addr)){
         addr = get_ipv6_pinfo_saddr(np);
     }
 

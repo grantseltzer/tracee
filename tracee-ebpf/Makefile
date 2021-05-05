@@ -19,7 +19,7 @@ OUT_DIR ?= dist
 GO_SRC := $(shell find . -type f -name '*.go')
 OUT_BIN := $(OUT_DIR)/tracee-ebpf
 BPF_SRC := tracee/tracee.bpf.c 
-OUT_BPF := $(OUT_DIR)/tracee.bpf.$(subst .,_,$(KERN_RELEASE)).$(subst .,_,$(VERSION)).o
+OUT_BPF := $(OUT_DIR)/tracee.bpf.o
 BPF_HEADERS := 3rdparty/include
 BPF_BUNDLE := $(OUT_DIR)/tracee.bpf.tar.gz
 LIBBPF_SRC := 3rdparty/libbpf/src
@@ -75,7 +75,7 @@ linux_arch := $(ARCH:x86_64=x86)
 ifndef DOCKER
 ifndef CORE
 #docker no, CO:RE no
-$(OUT_DIR)/tracee.bpf.%.o: $(BPF_SRC) $(LIBBPF_HEADERS) | $(OUT_DIR) $(bpf_compile_tools)
+$(OUT_DIR)/tracee.bpf.o: $(BPF_SRC) $(LIBBPF_HEADERS) | $(OUT_DIR) $(bpf_compile_tools)
 	@v=$$($(CMD_CLANG) --version); test $$(echo $${v#*version} | head -n1 | cut -d '.' -f1) -ge '9' || (echo 'required minimum clang version: 9' ; false)
 	$(CMD_CLANG) -S \
 		-D__BPF_TRACING__ \
@@ -109,10 +109,7 @@ $(OUT_DIR)/tracee.bpf.%.o: $(BPF_SRC) $(LIBBPF_HEADERS) | $(OUT_DIR) $(bpf_compi
 		-fno-asynchronous-unwind-tables \
 		-xc \
 		-nostdinc \
-		-O2 -emit-llvm -c -g $< -o $(@:.o=.ll)
-	$(CMD_LLC) -march=bpf -filetype=obj -o $@ $(@:.o=.ll)
-	-$(CMD_LLVM_STRIP) -g $@
-	rm $(@:.o=.ll)
+		-O2 -emit-llvm -c -g -o $@ $<
 else
 #docker no, CO:RE yes
 $(OUT_DIR)/tracee.bpf.o: $(BPF_SRC) $(LIBBPF_HEADERS) $(CMD_CLANG)
