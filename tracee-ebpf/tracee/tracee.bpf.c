@@ -1677,7 +1677,7 @@ static __always_inline void network_to_host_v4(net_conn_v4_t *net_details)
 
 static __always_inline int get_network_details_from_sock_v4(struct sock *sk, net_conn_v4_t *net_details, int peer)
 {
-    struct inet_sock *inet = inet_sk(sk);
+    struct inet_sock *inet = (struct inet_sock *)(sk);
 
     u32 addr = 0;
     addr = get_inet_rcv_saddr(inet);
@@ -1717,9 +1717,14 @@ static __always_inline struct ipv6_pinfo *inet6_sk_own_impl(struct sock *__sk, s
     return sk_fullsock ? pinet6_own_impl : NULL;
 }
 
+static inline bool ipv6_addr_any(const struct in6_addr *a)
+{
+    return (a->in6_u.u6_addr32[0] | a->in6_u.u6_addr32[1] | a->in6_u.u6_addr32[2] | a->in6_u.u6_addr32[3]) == 0;
+}
+
 static __always_inline int get_network_details_from_sock_v6(struct sock *sk, net_conn_v6_t *net_details, int peer)
 {
-    struct inet_sock *inet = inet_sk(sk);
+    struct inet_sock *inet = (struct inet_sock *)(sk);
     struct ipv6_pinfo *np = inet6_sk_own_impl(sk, inet);
 
     struct in6_addr addr = {};
