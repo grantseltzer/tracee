@@ -1023,7 +1023,7 @@ func getBPFObject() (string, error) {
 		}
 		return bpfPath, nil
 	}
-	bpfObjFileName := fmt.Sprintf("tracee.bpf.%s.%s.o", strings.ReplaceAll(tracee.UnameRelease(), ".", "_"), strings.ReplaceAll(version, ".", "_"))
+	bpfObjFileName := "tracee.bpf.o"
 	exePath, err := os.Executable()
 	if err != nil {
 		return "", err
