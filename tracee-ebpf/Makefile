@@ -109,7 +109,10 @@ $(OUT_DIR)/tracee.bpf.o: $(BPF_SRC) $(LIBBPF_HEADERS) | $(OUT_DIR) $(bpf_compile
 		-fno-asynchronous-unwind-tables \
 		-xc \
 		-nostdinc \
-		-O2 -emit-llvm -c -g -o $@ $<
+		-O2 -emit-llvm -c -g $< -o $(@:.o=.ll)
+	$(CMD_LLC) -march=bpf -filetype=obj -o $@ $(@:.o=.ll)
+	-$(CMD_LLVM_STRIP) -g $@
+	rm $(@:.o=.ll)
 else
 #docker no, CO:RE yes
 $(OUT_DIR)/tracee.bpf.o: $(BPF_SRC) $(LIBBPF_HEADERS) $(CMD_CLANG)

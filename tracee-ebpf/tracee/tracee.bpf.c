@@ -45,25 +45,18 @@
 #include <linux/kconfig.h>
 #include <linux/version.h>
 
-#undef container_of
-#include <bpf_helpers.h>
-#include <bpf_tracing.h>
-#include <bpf_endian.h>
-#include <bpf_core_read.h>
-
 #else
 //CO:RE is enabled
 #include "vmlinux.h"
+#include "missing_macros.h"
+#endif
+
 
 #undef container_of
 #include <bpf_helpers.h>
 #include <bpf_tracing.h>
 #include <bpf_endian.h>
 #include <bpf_core_read.h>
-
-#include "missing_macros.h"
-
-#endif
 
 
 #if defined(bpf_target_x86)
@@ -270,7 +263,6 @@
     BPF_CORE_READ(src, a, ##__VA_ARGS__); \
 })
 #endif
-
 
 #ifndef CORE
 #define READ_KERN(ptr) ({ typeof(ptr) _val;                             \
