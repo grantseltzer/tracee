@@ -53,6 +53,7 @@
 
 
 #undef container_of
+//#include "bpf_core_read.h"
 #include <bpf_helpers.h>
 #include <bpf_tracing.h>
 #include <bpf_endian.h>
@@ -64,8 +65,6 @@
 #elif defined(bpf_target_arm64)
 #define PT_REGS_PARM6(x) (((PT_REGS_ARM64 *)(x))->regs[5])
 #endif
-
-#define TASK_COMM_LEN			16
 
 #define MAX_PERCPU_BUFSIZE  (1 << 15)     // This value is actually set by the kernel as an upper bound
 #define MAX_STRING_SIZE     4096          // Choosing this value to be the same as PATH_MAX
@@ -215,55 +214,6 @@
 
 #define DEV_NULL_STR    0
 
-#define KERNEL_CONFIG_BPF                       1
-#define KERNEL_CONFIG_BPF_SYSCALL               2
-#define KERNEL_CONFIG_HAVE_EBPF_JIT             3
-#define KERNEL_CONFIG_BPF_JIT                   4
-#define KERNEL_CONFIG_BPF_JIT_ALWAYS_ON         5
-#define KERNEL_CONFIG_CGROUPS                   6
-#define KERNEL_CONFIG_CGROUP_BPF                7
-#define KERNEL_CONFIG_CGROUP_NET_CLASSID        8
-#define KERNEL_CONFIG_SOCK_CGROUP_DATA          9
-#define KERNEL_CONFIG_BPF_EVENTS                10
-#define KERNEL_CONFIG_KPROBE_EVENTS             11
-#define KERNEL_CONFIG_UPROBE_EVENTS             12
-#define KERNEL_CONFIG_TRACING                   13
-#define KERNEL_CONFIG_FTRACE_SYSCALLS           14
-#define KERNEL_CONFIG_FUNCTION_ERROR_INJECTION  15
-#define KERNEL_CONFIG_BPF_KPROBE_OVERRIDE       16
-#define KERNEL_CONFIG_NET                       17
-#define KERNEL_CONFIG_XDP_SOCKETS               18
-#define KERNEL_CONFIG_LWTUNNEL_BPF              19
-#define KERNEL_CONFIG_NET_ACT_BPF               20
-#define KERNEL_CONFIG_NET_CLS_BPF               21
-#define KERNEL_CONFIG_NET_CLS_ACT               22
-#define KERNEL_CONFIG_NET_SCH_INGRESS           23
-#define KERNEL_CONFIG_XFRM                      24
-#define KERNEL_CONFIG_IP_ROUTE_CLASSID          25
-#define KERNEL_CONFIG_IPV6_SEG6_BPF             26
-#define KERNEL_CONFIG_BPF_LIRC_MODE2            27
-#define KERNEL_CONFIG_BPF_STREAM_PARSER         28
-#define KERNEL_CONFIG_NETFILTER_XT_MATCH_BPF    29
-#define KERNEL_CONFIG_BPFILTER                  30
-#define KERNEL_CONFIG_BPFILTER_UMH              31
-#define KERNEL_CONFIG_TEST_BPF                  32
-#define KERNEL_CONFIG_HZ                        33
-#define KERNEL_CONFIG_DEBUG_INFO_BTF            34
-#define KERNEL_CONFIG_DEBUG_INFO_BTF_MODULES    35
-#define KERNEL_CONFIG_BPF_LSM                   36
-#define KERNEL_CONFIG_BPF_PRELOAD               37
-#define KERNEL_CONFIG_BPF_PRELOAD_UMD           38
-
-#ifndef CORE
-#define KERN_READ(src, a, ...) ({         \
-    BPF_PROBE_READ(src, a, ##__VA_ARGS__); \
-})
-#else
-#define KERN_READ(src, a, ...) ({         \
-    BPF_CORE_READ(src, a, ##__VA_ARGS__); \
-})
-#endif
-
 #ifndef CORE
 #define READ_KERN(ptr) ({ typeof(ptr) _val;                             \
                           __builtin_memset(&_val, 0, sizeof(_val));     \
@@ -271,6 +221,7 @@
                           _val;                                         \
                         })
 #else
+// Try using READ_KERN here, just don't embed them in each other
 #define READ_KERN(ptr) ({ typeof(ptr) _val;                             \
                           __builtin_memset(&_val, 0, sizeof(_val));     \
                           bpf_core_read(&_val, sizeof(_val), &ptr);    \
@@ -323,7 +274,6 @@ struct bpf_map_def SEC("maps") _name = { \
 #endif
 
 /*=============================== INTERNAL STRUCTS ===========================*/
-#define TASK_COMM_LEN			16
 
 typedef struct internal_proc_context {
     u64 ts;                     // Timestamp
@@ -462,128 +412,139 @@ BPF_PERF_OUTPUT(file_writes);                       // File writes events submis
 
 /*================== KERNEL VERSION DEPENDANT HELPER FUNCTIONS =================*/
 
-static __always_inline u32 kernel_config_option_enabled(u32 key) {
-    u32 *set = bpf_map_lookup_elem(&kernel_config_map, &key);
-    if (set == NULL) {
-        return false;
-    }
-    return *set;
-}
-
 static __always_inline u32 get_mnt_ns_id(struct nsproxy *ns)
 {
-    return KERN_READ(ns, mnt_ns, ns).inum;
+    struct mnt_namespace* mntns = READ_KERN(ns->mnt_ns);
+    return READ_KERN(mntns->ns.inum);
 }
 
 static __always_inline u32 get_pid_ns_id(struct nsproxy *ns)
 {
-    return KERN_READ(ns, pid_ns_for_children, ns).inum;
+    struct pid_namespace* pidns = READ_KERN(ns->pid_ns_for_children);
+    return READ_KERN(pidns->ns.inum);
 }
 
 static __always_inline u32 get_uts_ns_id(struct nsproxy *ns)
 {
-    return KERN_READ(ns, uts_ns, ns).inum;
+    struct uts_namespace* uts_ns = READ_KERN(ns->uts_ns);
+    return READ_KERN(uts_ns->ns.inum);
 }
 
 static __always_inline u32 get_ipc_ns_id(struct nsproxy *ns)
 {
-    return KERN_READ(ns, ipc_ns, ns).inum;
+    struct ipc_namespace* ipc_ns = READ_KERN(ns->ipc_ns);
+    return READ_KERN(ipc_ns->ns.inum);
 }
 
 static __always_inline u32 get_net_ns_id(struct nsproxy *ns)
 {
-    return KERN_READ(ns, net_ns, ns).inum;
+    struct net* net_ns = READ_KERN(ns->net_ns);
+    return READ_KERN(net_ns ->ns.inum);
 }
 
 static __always_inline u32 get_cgroup_ns_id(struct nsproxy *ns)
 {
-    return KERN_READ(ns, cgroup_ns, ns).inum;
+    struct cgroup_namespace* cgroup_ns = READ_KERN(ns->cgroup_ns);
+    return READ_KERN(cgroup_ns->ns.inum);
 }
 
 static __always_inline u32 get_task_mnt_ns_id(struct task_struct *task)
 {
-    return get_mnt_ns_id(KERN_READ(task, nsproxy));
+    return get_mnt_ns_id(READ_KERN(task->nsproxy));
 }
 
 static __always_inline u32 get_task_pid_ns_id(struct task_struct *task)
 {
-    return get_pid_ns_id(KERN_READ(task, nsproxy));
+    return get_pid_ns_id(READ_KERN(task->nsproxy));
 }
 
 static __always_inline u32 get_task_uts_ns_id(struct task_struct *task)
 {
-    return get_uts_ns_id(KERN_READ(task, nsproxy));
+    return get_uts_ns_id(READ_KERN(task->nsproxy));
 }
 
 static __always_inline u32 get_task_ipc_ns_id(struct task_struct *task)
 {
-    return get_ipc_ns_id(KERN_READ(task, nsproxy));
+    return get_ipc_ns_id(READ_KERN(task->nsproxy));
 }
 
 static __always_inline u32 get_task_net_ns_id(struct task_struct *task)
 {
-    return get_net_ns_id(KERN_READ(task, nsproxy));
+    return get_net_ns_id(READ_KERN(task->nsproxy));
 }
 
 static __always_inline u32 get_task_cgroup_ns_id(struct task_struct *task)
 {
-    return get_cgroup_ns_id(KERN_READ(task, nsproxy));
+    return get_cgroup_ns_id(READ_KERN(task->nsproxy));
 }
 
 static __always_inline u32 get_task_ns_pid(struct task_struct *task)
 {
-    unsigned int level = KERN_READ(task, nsproxy, pid_ns_for_children, level);
+    struct nsproxy *namespaceproxy = READ_KERN(task->nsproxy);
+    struct pid_namespace *pid_ns_children = READ_KERN(namespaceproxy->pid_ns_for_children);
+    unsigned int level = READ_KERN(pid_ns_children->level);
+
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0) && !defined(RHEL_RELEASE_GT_8_0))
     // kernel 4.14-4.18:
     return READ_KERN(READ_KERN(task->pids[PIDTYPE_PID].pid)->numbers[level].nr);
 #else
     // kernel 4.19 onwards:
-    return KERN_READ(task, thread_pid, numbers[level]).nr;
+    struct pid *tpid = READ_KERN(task->thread_pid);
+    return READ_KERN(tpid->numbers[level].nr);
 #endif
 }
 
 static __always_inline u32 get_task_ns_tgid(struct task_struct *task)
-{
-    unsigned int level = KERN_READ(task, nsproxy, pid_ns_for_children, level);
-    struct task_struct *group_leader = KERN_READ(task, group_leader);
-
+{    
+    struct nsproxy *namespaceproxy = READ_KERN(task->nsproxy);
+    struct pid_namespace *pid_ns_children = READ_KERN(namespaceproxy->pid_ns_for_children);
+    unsigned int level = READ_KERN(pid_ns_children->level);
+    struct task_struct *group_leader = READ_KERN(task->group_leader);
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0) && !defined(RHEL_RELEASE_GT_8_0))
     // kernel 4.14-4.18:
     return READ_KERN(READ_KERN(group_leader->pids[PIDTYPE_PID].pid)->numbers[level].nr);
 #else
     // kernel 4.19 onwards:
-    return KERN_READ(group_leader, thread_pid, numbers[level]).nr;
+    struct pid *tpid = READ_KERN(group_leader->thread_pid);
+    return READ_KERN(tpid->numbers[level].nr);
 #endif
 }
 
 static __always_inline u32 get_task_ns_ppid(struct task_struct *task)
 {
-    struct task_struct *real_parent = KERN_READ(task, real_parent);
-    unsigned int level = KERN_READ(real_parent, nsproxy, pid_ns_for_children, level);
+    struct task_struct *real_parent = READ_KERN(task->real_parent);
+    struct nsproxy *namespaceproxy = READ_KERN(real_parent->nsproxy);
+    struct pid_namespace *pid_ns_children = READ_KERN(namespaceproxy->pid_ns_for_children);
+    unsigned int level = READ_KERN(pid_ns_children->level);
+
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0) && !defined(RHEL_RELEASE_GT_8_0))
     // kernel 4.14-4.18:
     return READ_KERN(READ_KERN(real_parent->pids[PIDTYPE_PID].pid)->numbers[level].nr);
 #else
     // kernel 4.19 onwards:
-    return KERN_READ(real_parent, thread_pid, numbers[level]).nr;
+    struct pid *tpid = READ_KERN(real_parent->thread_pid);
+    return READ_KERN(tpid->numbers[level].nr);
 #endif
 }
 
 static __always_inline char * get_task_uts_name(struct task_struct *task)
 {
-    return KERN_READ(task, nsproxy, uts_ns, name).nodename;
+    struct nsproxy *np = READ_KERN(task->nsproxy);
+    struct uts_namespace *uts_ns = READ_KERN(np->uts_ns);
+    return READ_KERN(uts_ns->name.nodename);
 }
 
 static __always_inline u32 get_task_ppid(struct task_struct *task)
 {
-    return KERN_READ(task, real_parent, pid);
+    struct task_struct *parent = READ_KERN(task->real_parent);
+    return READ_KERN(parent->pid);
 }
 
 static __always_inline bool is_x86_compat(struct task_struct *task)
 {
 #if defined(bpf_target_x86)
-    return KERN_READ(task, thread_info).status & TS_COMPAT;
+    return READ_KERN(task->thread_info.status) & TS_COMPAT;
 #else
     return false;
 #endif
@@ -592,7 +553,7 @@ static __always_inline bool is_x86_compat(struct task_struct *task)
 static __always_inline bool is_arm64_compat(struct task_struct *task)
 {
 #if defined(bpf_target_arm64)
-    return KERN_READ(task, thread_info).flags &_TIF_32BIT;
+    return READ_KERN(task->thread_info.flags) & _TIF_32BIT;
 #else
     return false;
 #endif
@@ -612,7 +573,7 @@ static __always_inline bool is_compat(struct task_struct *task)
 #if defined(bpf_target_x86)
 static __always_inline struct pt_regs* get_task_pt_regs(struct task_struct *task)
 {
-    void* __ptr = KERN_READ(task, stack) + THREAD_SIZE - TOP_OF_KERNEL_STACK_PADDING;
+    void* __ptr = READ_KERN(task->stack) + THREAD_SIZE - TOP_OF_KERNEL_STACK_PADDING;
     return ((struct pt_regs *)__ptr) - 1;
 }
 #endif
@@ -622,7 +583,7 @@ static __always_inline int get_syscall_ev_id_from_regs()
 #if defined(bpf_target_x86)
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
     struct pt_regs *real_ctx = get_task_pt_regs(task);
-    int syscall_nr = KERN_READ(real_ctx, orig_ax);
+    int syscall_nr = READ_KERN(real_ctx->orig_ax);
 
     if (is_x86_compat(task)) {
         // Translate 32bit syscalls to 64bit syscalls (which also represent the event ids)
@@ -641,47 +602,51 @@ static __always_inline int get_syscall_ev_id_from_regs()
 
 static __always_inline struct dentry* get_mnt_root_ptr_from_vfsmnt(struct vfsmount *vfsmnt)
 {
-    return KERN_READ(vfsmnt, mnt_root);
+    return READ_KERN(vfsmnt->mnt_root);
 }
 
 static __always_inline struct dentry* get_d_parent_ptr_from_dentry(struct dentry *dentry)
 {
-    return KERN_READ(dentry, d_parent);
+    return READ_KERN(dentry->d_parent);
 }
 
 static __always_inline struct qstr get_d_name_from_dentry(struct dentry *dentry)
 {
-    return KERN_READ(dentry, d_name);
+    return READ_KERN(dentry->d_name);
 }
 
 static __always_inline struct file* get_file_ptr_from_bprm(struct linux_binprm *bprm)
 {
-    return KERN_READ(bprm, file);
+    return READ_KERN(bprm->file);
 }
 
 static __always_inline dev_t get_dev_from_file(struct file *file)
 {
-    return KERN_READ(file, f_inode, i_sb, s_dev);
+    struct inode *f_inode = READ_KERN(file->f_inode);
+    struct super_block *i_sb = READ_KERN(f_inode->i_sb);
+    return READ_KERN(i_sb->s_dev);
 }
 
 static __always_inline unsigned long get_inode_nr_from_file(struct file *file)
 {
-    return KERN_READ(file, f_inode, i_ino);
+    struct inode *f_inode = READ_KERN(file->f_inode);
+    return READ_KERN(f_inode->i_ino);
 }
 
 static __always_inline unsigned short get_inode_mode_from_file(struct file *file)
 {
-    return KERN_READ(file, f_inode, i_mode);
+    struct inode *f_inode = READ_KERN(file->f_inode);
+    return READ_KERN(f_inode->i_mode);
 }
 
 static __always_inline struct path get_path_from_file(struct file *file)
 {
-    return KERN_READ(file, f_path);
+    return READ_KERN(file->f_path);
 }
 
 static __always_inline unsigned long get_vma_flags(struct vm_area_struct *vma)
 {
-    return KERN_READ(vma, vm_flags);
+    return READ_KERN(vma->vm_flags);
 }
 
 static inline struct mount *real_mount(struct vfsmount *mnt)
@@ -691,61 +656,63 @@ static inline struct mount *real_mount(struct vfsmount *mnt)
 
 static __always_inline u32 get_inet_rcv_saddr(struct inet_sock *inet)
 {
-    return KERN_READ(inet, inet_rcv_saddr);
+    return READ_KERN(inet->inet_rcv_saddr);
 }
 
 static __always_inline u32 get_inet_saddr(struct inet_sock *inet)
 {
-    return KERN_READ(inet, inet_saddr);
+    return READ_KERN(inet->inet_saddr);
 }
 
 static __always_inline u32 get_inet_daddr(struct inet_sock *inet)
 {
-    return KERN_READ(inet, inet_daddr);
+    return READ_KERN(inet->inet_daddr);
 }
 
 static __always_inline u16 get_inet_sport(struct inet_sock *inet)
 {
-    return KERN_READ(inet, inet_sport);
+    return READ_KERN(inet->inet_sport);
 }
 
 static __always_inline u16 get_inet_dport(struct inet_sock *inet)
 {
-    return KERN_READ(inet, inet_dport);
+    return READ_KERN(inet->inet_dport);
 }
 
 static __always_inline struct sock* get_socket_sock(struct socket *socket)
 {
-    return KERN_READ(socket, sk);
+    return READ_KERN(socket->sk);
 }
 
 static __always_inline u16 get_sock_family(struct sock *sock)
 {
-    return KERN_READ(sock, sk_family);
+    return READ_KERN(sock->sk_family);
 }
 
 static __always_inline u16 get_sockaddr_family(struct sockaddr *address)
 {
-    return KERN_READ(address, sa_family);
+    return READ_KERN(address->sa_family);
 }
 
 static __always_inline struct in6_addr get_sock_v6_rcv_saddr(struct sock *sock)
 {
-    return KERN_READ(sock, sk_v6_rcv_saddr);
+    return READ_KERN(sock->sk_v6_rcv_saddr);
 }
 
 static __always_inline struct in6_addr get_ipv6_pinfo_saddr(struct ipv6_pinfo *np)
 {
-    return KERN_READ(np, saddr);
+    return READ_KERN(np->saddr);
 }
 
 static __always_inline struct in6_addr get_sock_v6_daddr(struct sock *sock)
 {
-    return KERN_READ(sock, sk_v6_daddr);
+    return READ_KERN(sock->sk_v6_daddr);
 }
 
 static __always_inline volatile unsigned char get_sock_state(struct sock *sock)
 {
+    // return READ_KERN(sock->sk_state);
+
     volatile unsigned char sk_state_own_impl;
     bpf_probe_read((void *)&sk_state_own_impl, sizeof(sk_state_own_impl), (const void *)&sock->sk_state);
     return sk_state_own_impl;
@@ -753,7 +720,7 @@ static __always_inline volatile unsigned char get_sock_state(struct sock *sock)
 
 static __always_inline struct ipv6_pinfo* get_inet_pinet6(struct inet_sock *inet)
 {
-    return KERN_READ(inet, pinet6);
+    return READ_KERN(inet->pinet6);
 }
 
 /*============================== HELPER FUNCTIONS ==============================*/
@@ -1859,8 +1826,7 @@ int tracepoint__raw_syscalls__sys_exit(struct bpf_raw_tracepoint_args *ctx)
     long ret = ctx->args[1];
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
     struct pt_regs *regs = (struct pt_regs*)ctx->args[0];
-    int id = KERN_READ(regs, orig_ax);
-
+    int id = READ_KERN(regs->orig_ax);
 
     if (is_compat(task)) {
         // Translate 32bit syscalls to 64bit syscalls so we can send to the correct handler
@@ -2261,7 +2227,7 @@ int BPF_KPROBE(trace_commit_creds)
     struct cred *new = (struct cred *)PT_REGS_PARM1(ctx);
 
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-    struct cred *old = (struct cred *)KERN_READ(task, real_cred);
+    struct cred *old = (struct cred *)READ_KERN(task->real_cred);
 
     slim_cred_t old_slim = {0};
     slim_cred_t new_slim = {0};
@@ -2368,7 +2334,7 @@ int BPF_KPROBE(trace_switch_task_namespaces)
     if (!new)
         return 0;
 
-    pid_t pid = KERN_READ(task, pid);
+    pid_t pid = READ_KERN(task->pid);
     u32 old_mnt = get_task_mnt_ns_id(task);
     u32 new_mnt = get_mnt_ns_id(new);
     u32 old_pid = get_task_pid_ns_id(task);
@@ -3035,7 +3001,7 @@ static __always_inline int do_vfs_write_writev_tail(struct pt_regs *ctx, u32 eve
         if (*off > MAX_PERCPU_BUFSIZE - MAX_STRING_SIZE)
             break;
 
-        if (has_prefix(filter_p->path, (char *)&string_p->buf[*off], MAX_PATH_PREF_SIZE)) {
+        if (has_prefix(filter_p->path, &string_p->buf[*off], MAX_PATH_PREF_SIZE)) {
             filter_match = true;
             break;
         }
@@ -3070,7 +3036,7 @@ static __always_inline int do_vfs_write_writev_tail(struct pt_regs *ctx, u32 eve
         return -1;
 
     // check for /dev/null
-    if (!has_prefix(stored_str_p->path, (char *)&string_p->buf[*off], 10))
+    if (!has_prefix(stored_str_p->path, &string_p->buf[*off], 10))
         pid = 0;
 
     if (get_config(CONFIG_CAPTURE_FILES)) {
