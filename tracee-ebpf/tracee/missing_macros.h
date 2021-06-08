@@ -51,7 +51,7 @@
 #define sk_rxhash         __sk_common.skc_rxhash
 
 #define TS_COMPAT		0x0002	/* 32bit syscall active (64BIT)*/
-
+#define TASK_COMM_LEN 16
 #define THREAD_SIZE_ORDER 1
 #define THREAD_SIZE       (2*PAGE_SIZE)
 
