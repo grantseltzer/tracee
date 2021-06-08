@@ -725,14 +725,16 @@ func (t *Tracee) populateBPFMaps() error {
 	stringStoreMap, _ := t.bpfModule.GetMap("string_store")
 	stringStoreMap.Update(uint32(0), []byte("/dev/null"))
 
-	kernelConfig := helpers.KernelConfig{}
-	kernelConfig.InitKernelConfig()
+	// FIXME: TODO: Not gracefully checking if map exists or not
+	//
+	// kernelConfig := helpers.KernelConfig{}
+	// kernelConfig.InitKernelConfig()
 
-	kernelConfigMap, _ := t.bpfModule.GetMap("kernel_config_map")
-	v, err := kernelConfig.GetKernelConfigValue(helpers.CONFIG_DEBUG_INFO_BTF)
-	if err == nil && v == "y" {
-		kernelConfigMap.Update(helpers.CONFIG_DEBUG_INFO_BTF, uint32(1))
-	}
+	// kernelConfigMap, _ := t.bpfModule.GetMap("kernel_config_map")
+	// v, err := kernelConfig.GetKernelConfigValue(helpers.CONFIG_DEBUG_INFO_BTF)
+	// if err == nil && v == "y" {
+	// 	kernelConfigMap.Update(helpers.CONFIG_DEBUG_INFO_BTF, uint32(1))
+	// }
 
 	eventsParams := t.initEventsParams()
 
