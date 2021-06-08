@@ -116,7 +116,7 @@ $(OUT_DIR)/tracee.bpf.o: $(BPF_SRC) $(LIBBPF_HEADERS) | $(OUT_DIR) $(bpf_compile
 else
 #docker no, CO:RE yes
 $(OUT_DIR)/tracee.bpf.o: $(BPF_SRC) $(LIBBPF_HEADERS) $(CMD_CLANG)
-	$(CMD_CLANG) -S \
+	$(CMD_CLANG) \
 		-I $(LIBBPF_HEADERS)/bpf \
 		-I $(BPF_HEADERS) \
 		-DCORE \
@@ -125,22 +125,6 @@ $(OUT_DIR)/tracee.bpf.o: $(BPF_SRC) $(LIBBPF_HEADERS) $(CMD_CLANG)
 		-D__VM_LINUX_H__ \
 		-D__KERNEL__ \
 		-DLINUX_VERSION_CODE=$(LINUX_VERSION_CODE) \
-		-Wno-address-of-packed-member \
-		-Wno-compare-distinct-pointer-types \
-		-Wno-deprecated-declarations \
-		-Wno-gnu-variable-sized-type-not-at-end \
-		-Wno-pointer-sign \
-		-Wno-pragma-once-outside-header \
-		-Wno-unknown-warning-option \
-		-Wno-unused-value \
-		-Wunused \
-		-Wall \
-		-fno-stack-protector \
-		-fno-jump-tables \
-		-fno-unwind-tables \
-		-fno-asynchronous-unwind-tables \
-		-xc \
-		-nostdinc \
 		-target bpf \
 		-O2 -c -g -o $@ $<
 endif
