@@ -66,6 +66,11 @@
 #define PT_REGS_PARM6(x) (((PT_REGS_ARM64 *)(x))->regs[5])
 #endif
 
+
+#ifdef CORE
+extern bool CONFIG_ARCH_HAS_SYSCALL_WRAPPER __kconfig;
+#endif
+
 #define MAX_PERCPU_BUFSIZE  (1 << 15)     // This value is actually set by the kernel as an upper bound
 #define MAX_STRING_SIZE     4096          // Choosing this value to be the same as PATH_MAX
 #define MAX_BYTES_ARR_SIZE  4096          // Max size of bytes array, arbitrarily chosen
@@ -1214,38 +1219,51 @@ static __always_inline int save_path_to_str_buf(buf_t *string_p, const struct pa
     int zero = 0;
     struct dentry *dentry = f_path.dentry;
     struct vfsmount *vfsmnt = f_path.mnt;
+
+    struct dentry *mnt_mountpoint_p;
+    struct mount *mnt_parent_p;
+
     struct mount *mnt_p = real_mount(vfsmnt);
-    struct mount mnt;
-    bpf_probe_read(&mnt, sizeof(struct mount), mnt_p);
+    bpf_probe_read(&mnt_mountpoint_p, sizeof(struct dentry*), &mnt_p->mnt_mountpoint);
+    bpf_probe_read(&mnt_parent_p, sizeof(struct mount*), &mnt_p->mnt_parent);
 
     u32 buf_off = (MAX_PERCPU_BUFSIZE >> 1);
+    struct dentry *mnt_root;
+    struct dentry *d_parent;
+    struct qstr d_name;
+    unsigned int len;
+    unsigned int off;
+    int sz;
 
     #pragma unroll
     // As bpf loops are not allowed and max instructions number is 4096, path components is limited to 30
     for (int i = 0; i < 30; i++) {
-        struct dentry *mnt_root = get_mnt_root_ptr_from_vfsmnt(vfsmnt);
-        struct dentry *d_parent = get_d_parent_ptr_from_dentry(dentry);
+        mnt_root = get_mnt_root_ptr_from_vfsmnt(vfsmnt);
+        d_parent = get_d_parent_ptr_from_dentry(dentry);
         if (dentry == mnt_root || dentry == d_parent) {
             if (dentry != mnt_root) {
                 // We reached root, but not mount root - escaped?
                 break;
             }
-            if (mnt_p != mnt.mnt_parent) {
+            if (mnt_p != mnt_parent_p) {
                 // We reached root, but not global root - continue with mount point path
-                dentry = mnt.mnt_mountpoint;
-                bpf_probe_read(&mnt, sizeof(struct mount), mnt.mnt_parent);
-                vfsmnt = &mnt.mnt;
+
+                bpf_probe_read(&dentry, sizeof(struct dentry*), &mnt_p->mnt_mountpoint);
+                bpf_probe_read(&mnt_p, sizeof(struct mount*), &mnt_p->mnt_parent);
+
+                bpf_probe_read(&mnt_parent_p, sizeof(struct mount*), &mnt_p->mnt_parent);
+                bpf_probe_read(&vfsmnt, sizeof(struct vfsmount*), (const void*)&mnt_p->mnt);
                 continue;
             }
             // Global root - path fully parsed
             break;
         }
         // Add this dentry name to path
-        struct qstr d_name = get_d_name_from_dentry(dentry);
-        unsigned int len = (d_name.len+1) & (MAX_STRING_SIZE-1);
-        unsigned int off = buf_off - len;
+        d_name = get_d_name_from_dentry(dentry);
+        len = (d_name.len+1) & (MAX_STRING_SIZE-1);
+        off = buf_off - len;
         // Is string buffer big enough for dentry name?
-        int sz = 0;
+        sz = 0;
         if (off <= buf_off) { // verify no wrap occured
             len = len & ((MAX_PERCPU_BUFSIZE >> 1)-1);
             sz = bpf_probe_read_str(&(string_p->buf[off & ((MAX_PERCPU_BUFSIZE >> 1)-1)]), len, (void *)d_name.name);
@@ -1266,7 +1284,7 @@ static __always_inline int save_path_to_str_buf(buf_t *string_p, const struct pa
     if (buf_off == (MAX_PERCPU_BUFSIZE >> 1)) {
         // memfd files have no path in the filesystem -> extract their name
         buf_off = 0;
-        struct qstr d_name = get_d_name_from_dentry(dentry);
+        d_name = get_d_name_from_dentry(dentry);
         bpf_probe_read_str(&(string_p->buf[0]), MAX_STRING_SIZE, (void *)d_name.name);
     } else {
         // Add leading slash
@@ -1722,7 +1740,7 @@ int tracepoint__raw_syscalls__sys_enter(struct bpf_raw_tracepoint_args *ctx)
     int id = ctx->args[1];
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
 
-#if defined(CONFIG_ARCH_HAS_SYSCALL_WRAPPER)
+if (CONFIG_ARCH_HAS_SYSCALL_WRAPPER) {
     struct pt_regs regs = {};
     bpf_probe_read(&regs, sizeof(struct pt_regs), (void*)ctx->args[0]);
 
@@ -1743,14 +1761,14 @@ int tracepoint__raw_syscalls__sys_enter(struct bpf_raw_tracepoint_args *ctx)
         args_tmp.args[4] = PT_REGS_PARM5(&regs);
         args_tmp.args[5] = PT_REGS_PARM6(&regs);
     }
-#else // CONFIG_ARCH_HAS_SYSCALL_WRAPPER
+} else { // NO CONFIG_ARCH_HAS_SYSCALL_WRAPPER
     args_tmp.args[0] = ctx->args[0];
     args_tmp.args[1] = ctx->args[1];
     args_tmp.args[2] = ctx->args[2];
     args_tmp.args[3] = ctx->args[3];
     args_tmp.args[4] = ctx->args[4];
     args_tmp.args[5] = ctx->args[5];
-#endif // CONFIG_ARCH_HAS_SYSCALL_WRAPPER
+} // END CONFIG_ARCH_HAS_SYSCALL_WRAPPER
 
     if (is_compat(task)) {
         // Translate 32bit syscalls to 64bit syscalls so we can send to the correct handler
