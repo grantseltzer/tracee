@@ -1061,9 +1061,6 @@ func getBPFObject() (string, error) {
 			return "", err
 		}
 		bpfObjFileName = s
-		if debug {
-			fmt.Printf("unpacked CO:RE bpf object file to: %s\n", bpfObjFileName)
-		}
 		searchPaths = []string{}
 	}
 
@@ -1107,6 +1104,11 @@ func unpackCOREBinary() (string, error) {
 		return "", err
 	}
 	f.Close()
+
+	if debug {
+		fmt.Printf("unpacked CO:RE bpf object file to: %s\n", f.Name())
+	}
+
 	return f.Name(), nil
 }
 
